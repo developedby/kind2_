@@ -7,6 +7,7 @@
 
 import Control.Monad (forM_)
 import Data.Char (chr, ord)
+import Data.List (intercalate)
 import Debug.Trace
 import Prelude hiding (LT, GT, EQ)
 import System.Environment (getArgs)
@@ -15,6 +16,13 @@ import Text.Parsec ((<|>))
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
 import qualified Text.Parsec as P
+
+
+showFill :: Fill -> String
+showFill fill = 
+  let entries = IM.toList fill
+      showEntry (k, v) = show k ++ " -> " ++ termStr v 0
+  in "{" ++ intercalate ", " (map showEntry entries) ++ "}"
 
 -- Kind2 Types
 -- -----------
@@ -923,6 +931,31 @@ infoStr book fill (Vague name) =
 infoStr book fill (Print value dep) =
   let val = termStr (normal book fill 0 value dep) dep
   in concat ["#print{", val, "}"]
+
+{- infoStr :: Book -> Fill -> Info -> String
+infoStr book fill (Found name typ ctx dep) =
+  let typ' = termStr (normal book fill 0 typ dep) dep
+      ctx' = drop 1 (contextStr book fill ctx dep)
+      fillStr = showFill fill
+  in concat ["#found{", name, " ", typ', " [", ctx', "]} Fill: ", fillStr]
+infoStr book fill (Error src expected detected value dep) =
+  let exp = termStr (normal book fill 0 expected dep) dep
+      det = termStr (normal book fill 0 detected dep) dep
+      val = termStr (normal book fill 0 value dep) dep
+      fillStr = showFill fill
+  in concat ["#error{", exp, " ", det, " ", val, " ", show src, "} Fill: ", fillStr]
+infoStr book fill (Solve name term dep) =
+  let term' = termStr (normal book fill 0 term dep) dep
+      fillStr = showFill fill
+  in concat ["#solve{", show name, " ",  term', "} Fill: ", fillStr]
+infoStr book fill (Vague name) =
+  let fillStr = showFill fill
+  in concat ["#vague{", name, "} Fill: ", fillStr]
+infoStr book fill (Print value dep) =
+  let val = termStr (normal book fill 0 value dep) dep
+      fillStr = showFill fill
+    in concat ["#print{", val, "} Fill: ", fillStr]
+ -}
 
 -- Parsing
 -- -------
