@@ -1144,6 +1144,8 @@ parseOper = P.choice
   , P.try (P.string "%") >> return MOD
   , P.try (P.string "<=") >> return LTE
   , P.try (P.string ">=") >> return GTE
+  , P.try (P.string "<<") >> return LSH
+  , P.try (P.string ">>") >> return RSH
   , P.try (P.string "<") >> return LT
   , P.try (P.string ">") >> return GT
   , P.try (P.string "==") >> return EQ
@@ -1151,8 +1153,6 @@ parseOper = P.choice
   , P.try (P.string "&") >> return AND
   , P.try (P.string "|") >> return OR
   , P.try (P.string "^") >> return XOR
-  , P.try (P.string "<<") >> return LSH
-  , P.try (P.string ">>") >> return RSH
   ]
 
 parseBook :: P.Parsec String () Book
