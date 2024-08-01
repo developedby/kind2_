@@ -822,6 +822,12 @@ checkDef (Ref nam) = do
       envFail
 checkDef other = error "invalid top-level definition"
 
+checkAllDefs :: Env ()
+checkAllDefs = do
+  book <- envGetBook
+  forM_ (M.toList book) $ \(name, term) -> do
+    checkDef (Ref name)
+
 -- Stringification
 -- ---------------
 
@@ -1193,6 +1199,11 @@ apiCheck book term = case envRun (checkDef term) book of
   Done state value -> apiPrintLogs state
   Fail state       -> apiPrintLogs state
 
+apiCheckAll :: Book -> IO ()
+apiCheckAll book = case envRun checkAllDefs book of
+  Done state value -> apiPrintLogs state
+  Fail state       -> apiPrintLogs state
+
 apiPrintLogs :: State -> IO ()
 apiPrintLogs (State book fill susp (log : logs)) = do
   putStrLn $ infoStr book fill log
@@ -1216,6 +1227,10 @@ main = do
       case M.lookup "MAIN" book of
         Just term -> apiCheck book (Ref "MAIN")
         Nothing -> putStrLn "Error: No 'main' definition found in the file."
+    ["check-all", file] -> do
+      content <- readFile file
+      let book = doParseBook content
+      apiCheckAll book
     ["run", file] -> do
       content <- readFile file
       let book = doParseBook content
@@ -1237,7 +1252,8 @@ main = do
 printHelp :: IO ()
 printHelp = do
   putStrLn "Kind2 Core Checker (kindc) usage:"
-  putStrLn "  kindc check file.kindc # Type-checks the main definition"
-  putStrLn "  kindc run   file.kindc # Normalizes the main definition"
-  putStrLn "  kindc show  file.kindc # Stringifies the main definition"
-  putStrLn "  kindc help             # Shows this help message"
+  putStrLn "  kindc check file.kindc     # Type-checks the main definition"
+  putStrLn "  kindc check-all file.kindc # Type-checks all definitions"
+  putStrLn "  kindc run   file.kindc     # Normalizes the main definition"
+  putStrLn "  kindc show  file.kindc     # Stringifies the main definition"
+  putStrLn "  kindc help                 # Shows this help message"
