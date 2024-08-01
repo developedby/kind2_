@@ -544,44 +544,44 @@ unifySubst lvl neo (Src src val)     = Src src (unifySubst lvl neo val)
 
 -- ### Inference
 
-infer :: Term -> Int -> Env Term
-infer term dep =
+infer :: Int -> Term -> Int -> Env Term
+infer src term dep =
   -- trace ("infer: " ++ termStr term dep) $
-  inferGo term dep
+  inferGo src term dep
 
-inferGo :: Term -> Int -> Env Term
+inferGo :: Int -> Term -> Int -> Env Term
 
 -- inp : Set
 -- (bod {nam: inp}) : Set
 -- ----------------------- function
 -- (∀(nam: inp) bod) : Set
-inferGo (All nam inp bod) dep = do
-  envSusp (Check 0 inp Set dep)
-  envSusp (Check 0 (bod (Ann False (Var nam dep) inp)) Set (dep + 1))
+inferGo src (All nam inp bod) dep = do
+  envSusp (Check src inp Set dep)
+  envSusp (Check src (bod (Ann False (Var nam dep) inp)) Set (dep + 1))
   return Set
 
 -- fun : ∀(ftyp_nam: ftyp_inp) ftyp_bod
 -- arg : ftyp_inp
 -- ------------------------------------ application
 -- (fun arg) : (ftyp_bod arg)
-inferGo (App fun arg) dep = do
-  ftyp <- infer fun dep
+inferGo src (App fun arg) dep = do
+  ftyp <- infer src fun dep
   book <- envGetBook
   fill <- envGetFill
   case reduce book fill 2 ftyp of
     (All ftyp_nam ftyp_inp ftyp_bod) -> do
-      envSusp (Check 0 arg ftyp_inp dep)
+      envSusp (Check src arg ftyp_inp dep)
       return $ ftyp_bod arg
     otherwise -> do
-      envLog (Error 0 (Hol "function" []) ftyp (App fun arg) dep)
+      envLog (Error src (Hol "function" []) ftyp (App fun arg) dep)
       envFail
 
 -- 
 -- ---------------- annotation (infer)
 -- {val: typ} : typ
-inferGo (Ann chk val typ) dep = do
+inferGo src (Ann chk val typ) dep = do
   if chk then do
-    check 0 val typ dep
+    check src val typ dep
   else do
     return ()
   return typ
@@ -589,72 +589,72 @@ inferGo (Ann chk val typ) dep = do
 -- (bod {nam: typ}) : Set
 -- ----------------------- self-type
 -- ($(nam: typ) bod) : Set
-inferGo (Slf nam typ bod) dep = do
-  envSusp (Check 0 (bod (Ann False (Var nam dep) typ)) Set (dep + 1))
+inferGo src (Slf nam typ bod) dep = do
+  envSusp (Check src (bod (Ann False (Var nam dep) typ)) Set (dep + 1))
   return Set
 
 -- val : $(vtyp_nam: vtyp_typ) vtyp_bod
 -- ------------------------------------ self-inst (infer)
 -- ~val : (vtyp_bod (~val))
-inferGo (Ins val) dep = do
-  vtyp <- infer val dep
+inferGo src (Ins val) dep = do
+  vtyp <- infer src val dep
   book <- envGetBook
   fill <- envGetFill
   case reduce book fill 2 vtyp of
     (Slf vtyp_nam vtyp_typ vtyp_bod) -> do
       return $ vtyp_bod (Ins val)
     otherwise -> do
-      envLog (Error 0 (Hol "self-type" []) vtyp (Ins val) dep)
+      envLog (Error src (Hol "self-type" []) vtyp (Ins val) dep)
       envFail
 
 -- val : T
 -- ----------------- reference
 -- (Ref nam) : T
-inferGo (Ref nam) dep = do
+inferGo src (Ref nam) dep = do
   book <- envGetBook
   case M.lookup nam book of
-    Just val -> infer val dep
+    Just val -> infer src val dep
     Nothing  -> do
-      envLog (Error 0 (Hol "undefined_reference" []) (Hol "unknown_type" []) (Ref nam) dep)
+      envLog (Error src (Hol "undefined_reference" []) (Hol "unknown_type" []) (Ref nam) dep)
       envFail
 
 -- ...
 -- --------- type-in-type
 -- Set : Set
-inferGo Set dep = do
+inferGo src Set dep = do
   return Set
 
 -- ...
 -- --------- U48-type
 -- U48 : Set
-inferGo U48 dep = do
+inferGo src U48 dep = do
   return Set
 
 -- ...
 -- ----------- U48-value
 -- <num> : U48
-inferGo (Num num) dep = do
+inferGo src (Num num) dep = do
   return U48
 
 -- ...
 -- -------------- String-literal
 -- "txt" : String
-inferGo (Txt txt) dep = do
+inferGo src (Txt txt) dep = do
   return (Ref "String")
 
 -- ...
 -- --------- Nat-literal
 -- 123 : Nat
-inferGo (Nat val) dep = do
+inferGo src (Nat val) dep = do
   return (Ref "Nat")
 
 -- fst : U48
 -- snd : U48
 -- ----------------- U48-operator
 -- (+ fst snd) : U48
-inferGo (Op2 opr fst snd) dep = do
-  envSusp (Check 0 fst U48 dep)
-  envSusp (Check 0 snd U48 dep)
+inferGo src (Op2 opr fst snd) dep = do
+  envSusp (Check src fst U48 dep)
+  envSusp (Check src snd U48 dep)
   return U48
 
 -- x : U48
@@ -663,50 +663,50 @@ inferGo (Op2 opr fst snd) dep = do
 -- s : (n: U48) -> (p (+ 1 n))
 -- ------------------------------------- U48-elim
 -- (switch x { 0: z ; _: s }: p) : (p x)
-inferGo (Swi nam x z s p) dep = do
-  envSusp (Check 0 x U48 dep)
-  envSusp (Check 0 (p (Ann False (Var nam dep) U48)) Set dep)
-  envSusp (Check 0 z (p (Num 0)) dep)
-  envSusp (Check 0 (s (Ann False (Var (nam ++ "-1") dep) U48)) (p (Op2 ADD (Num 1) (Var (nam ++ "-1") dep))) (dep + 1))
+inferGo src (Swi nam x z s p) dep = do
+  envSusp (Check src x U48 dep)
+  envSusp (Check src (p (Ann False (Var nam dep) U48)) Set dep)
+  envSusp (Check src z (p (Num 0)) dep)
+  envSusp (Check src (s (Ann False (Var (nam ++ "-1") dep) U48)) (p (Op2 ADD (Num 1) (Var (nam ++ "-1") dep))) (dep + 1))
   return (p x)
 
 -- val : typ
 -- (bod {nam: typ}) : T
 -- ------------------------ let-binder (infer)
 -- (let nam = val; bod) : T
-inferGo (Let nam val bod) dep = do
-  typ <- infer val dep
-  infer (bod (Ann False (Var nam dep) typ)) dep
+inferGo src (Let nam val bod) dep = do
+  typ <- infer src val dep
+  infer src (bod (Ann False (Var nam dep) typ)) dep
 
 -- (bod val) : T
 -- ------------------------ use-binder (infer)
 -- (use nam = val; bod) : T
-inferGo (Use nam val bod) dep = do
-  infer (bod val) dep
+inferGo src (Use nam val bod) dep = do
+  infer src (bod val) dep
 
 -- Can't Infer λ
-inferGo (Lam nam bod) dep = do
-  envLog (Error 0  (Hol "type_annotation" []) (Hol "untyped_lambda" []) (Lam nam bod) dep)
+inferGo src (Lam nam bod) dep = do
+  envLog (Error src (Hol "type_annotation" []) (Hol "untyped_lambda" []) (Lam nam bod) dep)
   envFail
 
 -- Can't Infer ?A
-inferGo (Hol nam ctx) dep = do
-  envLog (Error 0  (Hol "type_annotation" []) (Hol "untyped_hole" []) (Hol nam ctx) dep)
+inferGo src (Hol nam ctx) dep = do
+  envLog (Error src (Hol "type_annotation" []) (Hol "untyped_hole" []) (Hol nam ctx) dep)
   envFail
 
 -- Can't Infer _
-inferGo (Met uid spn) dep = do
-  envLog (Error 0  (Hol "type_annotation" []) (Hol "untyped_meta" []) (Met uid spn) dep)
+inferGo src (Met uid spn) dep = do
+  envLog (Error src (Hol "type_annotation" []) (Hol "untyped_meta" []) (Met uid spn) dep)
   envFail
 
 -- Can't Infer Var
-inferGo (Var nam idx) dep = do
-  envLog (Error 0  (Hol "type_annotation" []) (Hol "untyped_variable" []) (Var nam idx) dep)
+inferGo src (Var nam idx) dep = do
+  envLog (Error src (Hol "type_annotation" []) (Hol "untyped_variable" []) (Var nam idx) dep)
   envFail
 
 -- Src-passthrough
-inferGo (Src src val) dep = do
-  infer val dep
+inferGo _ (Src src val) dep = do
+  infer src val dep
 
 check :: Int -> Term -> Term -> Int -> Env ()
 check src val typ dep =
@@ -728,9 +728,9 @@ checkGo src (Lam nam bod) typx dep = do
       let ann  = Ann False (Var nam dep) typ_inp
       let term = bod ann
       let typx = typ_bod ann
-      check 0 term typx (dep + 1)
+      check src term typx (dep + 1)
     otherwise -> do
-      infer (Lam nam bod) dep
+      infer src (Lam nam bod) dep
       return ()
 
 -- val : (typ_bod ~val)
@@ -741,9 +741,9 @@ checkGo src (Ins val) typx dep = do
   fill <- envGetFill
   case reduce book fill 2 typx of
     Slf typ_nam typ_typ typ_bod -> do
-      check 0 val (typ_bod (Ins val)) dep
+      check src val (typ_bod (Ins val)) dep
     _ -> do
-      infer (Ins val) dep
+      infer src (Ins val) dep
       return ()
 
 -- val : typ
@@ -751,14 +751,14 @@ checkGo src (Ins val) typx dep = do
 -- ------------------------ let-binder (check)
 -- (let nam = val; bod) : T
 checkGo src (Let nam val bod) typx dep = do
-  typ <- infer val dep
-  check 0 (bod (Ann False (Var nam dep) typ)) typx dep
+  typ <- infer src val dep
+  check src (bod (Ann False (Var nam dep) typ)) typx dep
 
 -- (bod val) : T
 -- ------------------------ use-binder (check)
 -- (use nam = val; bod) : T
 checkGo src (Use nam val bod) typx dep = do
-  check 0 (bod val) typx dep
+  check src (bod val) typx dep
 
 -- ...
 -- ------ inspection
@@ -777,7 +777,9 @@ checkGo src (Met uid spn) typx dep = do
 -- ---------------- annotation (check)
 -- {val: typ} : typ
 checkGo src (Ann chk val typ) typx dep = do
-  checkCompare src val typ typx dep
+  -- Flipped because Ann generated from Let gives wrong error
+  -- "Expected" gets swapped with "found"
+  checkCompare src val typx typ dep
   if chk then do
     check src val typ dep
   else do
@@ -794,7 +796,7 @@ checkGo _ (Src src val) typx dep = do
 -- -------
 -- val : B
 checkGo src term typx dep = do
-  infer <- infer term dep
+  infer <- infer src term dep
   checkCompare src term typx infer dep
 
 -- Checks types equality and reports
@@ -816,7 +818,7 @@ checkDef (Ref nam) = do
     Just val -> case val of
       Ann chk val typ -> check 0 val typ 0 >> return ()
       Ref nm2         -> checkDef (Ref nm2)
-      _               -> infer val 0 >> return ()
+      _               -> infer 0 val 0 >> return ()
     Nothing  -> do
       envLog (Error 0 (Hol "undefined_reference" []) (Hol "unknown_type" []) (Ref nam) 0)
       envFail
