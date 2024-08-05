@@ -17,13 +17,6 @@ import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
 import qualified Text.Parsec as P
 
-
-showFill :: Fill -> String
-showFill fill = 
-  let entries = IM.toList fill
-      showEntry (k, v) = show k ++ " -> " ++ termStr v 0
-  in "{" ++ intercalate ", " (map showEntry entries) ++ "}"
-
 -- Kind2 Types
 -- -----------
 
@@ -63,8 +56,20 @@ data Term
   -- U48 Type
   | U48
 
+  -- I48 Type
+  | I48
+
+  -- F48 Type
+  | F48
+
   -- U48 Value
-  | Num Int
+  | UNum Int
+
+  -- I48 Value
+  | INum Int
+
+  -- F48 Value
+  | FNum Double
 
   -- U48 Binary Operation
   | Op2 Oper Term Term
@@ -194,7 +199,11 @@ bind term = go term [] where
   go (Use nam val bod) ctx = Use nam (go val ctx) (\x -> go (bod (Var nam 0)) ((nam, x) : ctx))
   go Set               ctx = Set
   go U48               ctx = U48
-  go (Num val)         ctx = Num val
+  go I48               ctx = I48
+  go F48               ctx = F48
+  go (UNum val)        ctx = UNum val
+  go (INum val)        ctx = INum val
+  go (FNum val)        ctx = FNum val
   go (Op2 opr fst snd) ctx = Op2 opr (go fst ctx) (go snd ctx)
   go (Swi nam x z s p) ctx = Swi nam (go x ctx) (go z ctx) (\k -> go (s (Var (nam ++ "-1") 0)) ((nam ++ "-1", k) : ctx)) (\k -> go (p (Var nam 0)) ((nam, k) : ctx))
   go (Txt txt)         ctx = Txt txt
@@ -244,30 +253,63 @@ reduceMetSpine val []       = val
 reduceMetSpine val (x : xs) = reduceMetSpine (App val x) xs
 
 reduceOp2 :: Book -> Fill -> Int -> Oper -> Term -> Term -> Term
-reduceOp2 book fill 1  op  (Ref nam) (Num snd) = reduceOp2 book fill 1 op (reduceRef book fill 1 nam) (Num snd)
-reduceOp2 book fill 2  op  (Ref nam) (Num snd) = reduceOp2 book fill 2 op (reduceRef book fill 2 nam) (Num snd)
-reduceOp2 book fill 1  op  (Num fst) (Ref nam) = reduceOp2 book fill 1 op (Num fst) (reduceRef book fill 1 nam)
-reduceOp2 book fill 2  op  (Num fst) (Ref nam) = reduceOp2 book fill 2 op (Num fst) (reduceRef book fill 2 nam)
-reduceOp2 book fill lv ADD (Num fst) (Num snd) = Num (fst + snd)
-reduceOp2 book fill lv SUB (Num fst) (Num snd) = Num (fst - snd)
-reduceOp2 book fill lv MUL (Num fst) (Num snd) = Num (fst * snd)
-reduceOp2 book fill lv DIV (Num fst) (Num snd) = Num (div fst snd)
-reduceOp2 book fill lv MOD (Num fst) (Num snd) = Num (mod fst snd)
-reduceOp2 book fill lv EQ  (Num fst) (Num snd) = if fst == snd then Num 1 else Num 0
-reduceOp2 book fill lv NE  (Num fst) (Num snd) = if fst /= snd then Num 1 else Num 0
-reduceOp2 book fill lv LT  (Num fst) (Num snd) = if fst < snd then Num 1 else Num 0
-reduceOp2 book fill lv GT  (Num fst) (Num snd) = if fst > snd then Num 1 else Num 0
-reduceOp2 book fill lv LTE (Num fst) (Num snd) = if fst <= snd then Num 1 else Num 0
-reduceOp2 book fill lv GTE (Num fst) (Num snd) = if fst >= snd then Num 1 else Num 0
+reduceOp2 book fill 1  op  (Ref nam) (UNum snd) = reduceOp2 book fill 1 op (reduceRef book fill 1 nam) (UNum snd)
+reduceOp2 book fill 2  op  (Ref nam) (UNum snd) = reduceOp2 book fill 2 op (reduceRef book fill 2 nam) (UNum snd)
+reduceOp2 book fill 1  op  (UNum fst) (Ref nam) = reduceOp2 book fill 1 op (UNum fst) (reduceRef book fill 1 nam)
+reduceOp2 book fill 2  op  (UNum fst) (Ref nam) = reduceOp2 book fill 2 op (UNum fst) (reduceRef book fill 2 nam)
+reduceOp2 book fill lv ADD (UNum fst) (UNum snd) = UNum (fst + snd)
+reduceOp2 book fill lv SUB (UNum fst) (UNum snd) = UNum (fst - snd)
+reduceOp2 book fill lv MUL (UNum fst) (UNum snd) = UNum (fst * snd)
+reduceOp2 book fill lv DIV (UNum fst) (UNum snd) = UNum (quot fst snd)
+reduceOp2 book fill lv MOD (UNum fst) (UNum snd) = UNum (rem fst snd)
+reduceOp2 book fill lv EQ  (UNum fst) (UNum snd) = if fst == snd then UNum 1 else UNum 0
+reduceOp2 book fill lv NE  (UNum fst) (UNum snd) = if fst /= snd then UNum 1 else UNum 0
+reduceOp2 book fill lv LT  (UNum fst) (UNum snd) = if fst <  snd then UNum 1 else UNum 0
+reduceOp2 book fill lv GT  (UNum fst) (UNum snd) = if fst >  snd then UNum 1 else UNum 0
+reduceOp2 book fill lv LTE (UNum fst) (UNum snd) = if fst <= snd then UNum 1 else UNum 0
+reduceOp2 book fill lv GTE (UNum fst) (UNum snd) = if fst >= snd then UNum 1 else UNum 0
+
+reduceOp2 book fill 1  op  (Ref nam) (INum snd) = reduceOp2 book fill 1 op (reduceRef book fill 1 nam) (INum snd)
+reduceOp2 book fill 2  op  (Ref nam) (INum snd) = reduceOp2 book fill 2 op (reduceRef book fill 2 nam) (INum snd)
+reduceOp2 book fill 1  op  (INum fst) (Ref nam) = reduceOp2 book fill 1 op (INum fst) (reduceRef book fill 1 nam)
+reduceOp2 book fill 2  op  (INum fst) (Ref nam) = reduceOp2 book fill 2 op (INum fst) (reduceRef book fill 2 nam)
+reduceOp2 book fill lv ADD (INum fst) (INum snd) = INum (fst + snd)
+reduceOp2 book fill lv SUB (INum fst) (INum snd) = INum (fst - snd)
+reduceOp2 book fill lv MUL (INum fst) (INum snd) = INum (fst * snd)
+reduceOp2 book fill lv DIV (INum fst) (INum snd) = INum (quot fst snd)
+reduceOp2 book fill lv MOD (INum fst) (INum snd) = INum (rem fst snd)
+reduceOp2 book fill lv EQ  (INum fst) (INum snd) = if fst == snd then INum 1 else INum 0
+reduceOp2 book fill lv NE  (INum fst) (INum snd) = if fst /= snd then INum 1 else INum 0
+reduceOp2 book fill lv LT  (INum fst) (INum snd) = if fst <  snd then INum 1 else INum 0
+reduceOp2 book fill lv GT  (INum fst) (INum snd) = if fst >  snd then INum 1 else INum 0
+reduceOp2 book fill lv LTE (INum fst) (INum snd) = if fst <= snd then INum 1 else INum 0
+reduceOp2 book fill lv GTE (INum fst) (INum snd) = if fst >= snd then INum 1 else INum 0
+
+reduceOp2 book fill 1  op  (Ref nam) (FNum snd) = reduceOp2 book fill 1 op (reduceRef book fill 1 nam) (FNum snd)
+reduceOp2 book fill 2  op  (Ref nam) (FNum snd) = reduceOp2 book fill 2 op (reduceRef book fill 2 nam) (FNum snd)
+reduceOp2 book fill 1  op  (FNum fst) (Ref nam) = reduceOp2 book fill 1 op (FNum fst) (reduceRef book fill 1 nam)
+reduceOp2 book fill 2  op  (FNum fst) (Ref nam) = reduceOp2 book fill 2 op (FNum fst) (reduceRef book fill 2 nam)
+reduceOp2 book fill lv ADD (FNum fst) (FNum snd) = FNum (fst + snd)
+reduceOp2 book fill lv SUB (FNum fst) (FNum snd) = FNum (fst - snd)
+reduceOp2 book fill lv MUL (FNum fst) (FNum snd) = FNum (fst * snd)
+reduceOp2 book fill lv DIV (FNum fst) (FNum snd) = FNum (fst / snd)
+reduceOp2 book fill lv MOD (FNum fst) (FNum snd) = FNum (fmod fst snd) where fmod x y =  x - (fromIntegral (truncate (x / y))) * y
+reduceOp2 book fill lv EQ  (FNum fst) (FNum snd) = if fst == snd then FNum 1 else FNum 0
+reduceOp2 book fill lv NE  (FNum fst) (FNum snd) = if fst /= snd then FNum 1 else FNum 0
+reduceOp2 book fill lv LT  (FNum fst) (FNum snd) = if fst <  snd then FNum 1 else FNum 0
+reduceOp2 book fill lv GT  (FNum fst) (FNum snd) = if fst >  snd then FNum 1 else FNum 0
+reduceOp2 book fill lv LTE (FNum fst) (FNum snd) = if fst <= snd then FNum 1 else FNum 0
+reduceOp2 book fill lv GTE (FNum fst) (FNum snd) = if fst >= snd then FNum 1 else FNum 0
+
 reduceOp2 book fill lv opr fst snd             = Op2 opr fst snd
 
 reduceSwi :: Book -> Fill -> Int -> String -> Term -> Term -> (Term -> Term) -> (Term -> Term) -> Term
-reduceSwi book fill 2  nam (Ref x)             z s p = reduceSwi book fill 2 nam (reduceRef book fill 2 x) z s p
-reduceSwi book fill 1  nam (Ref x)             z s p = reduceSwi book fill 1 nam (reduceRef book fill 1 x) z s p
-reduceSwi book fill lv nam (Num 0)             z s p = reduce book fill lv z
-reduceSwi book fill lv nam (Num n)             z s p = reduce book fill lv (s (Num (n - 1)))
-reduceSwi book fill lv nam (Op2 ADD (Num 1) k) z s p = reduce book fill lv (s k)
-reduceSwi book fill lv nam val                 z s p = Swi nam val z s p
+reduceSwi book fill 2  nam (Ref x)              z s p = reduceSwi book fill 2 nam (reduceRef book fill 2 x) z s p
+reduceSwi book fill 1  nam (Ref x)              z s p = reduceSwi book fill 1 nam (reduceRef book fill 1 x) z s p
+reduceSwi book fill lv nam (UNum 0)             z s p = reduce book fill lv z
+reduceSwi book fill lv nam (UNum n)             z s p = reduce book fill lv (s (UNum (n - 1)))
+reduceSwi book fill lv nam (Op2 ADD (UNum 1) k) z s p = reduce book fill lv (s k)
+reduceSwi book fill lv nam val                  z s p = Swi nam val z s p
 
 reduceRef :: Book -> Fill -> Int -> String -> Term
 reduceRef book fill 2  nam = case M.lookup nam book of
@@ -278,7 +320,7 @@ reduceRef book fill lv nam = Ref nam
 
 reduceTxt :: Book -> Fill -> Int -> String -> Term
 reduceTxt book fill lv []     = reduce book fill lv (Ref "String/cons")
-reduceTxt book fill lv (x:xs) = reduce book fill lv (App (App (Ref "String/nil") (Num (ord x))) (Txt xs))
+reduceTxt book fill lv (x:xs) = reduce book fill lv (App (App (Ref "String/nil") (UNum (ord x))) (Txt xs))
 
 reduceNat :: Book -> Fill -> Int -> Integer -> Term
 reduceNat book fill lv 0 = Ref "Nat/zero"
@@ -301,7 +343,11 @@ normal book fill lv term dep = normalGo book fill lv (reduce book fill lv term) 
   normalGo book fill lv (Hol nam ctx)     dep = Hol nam ctx
   normalGo book fill lv Set               dep = Set
   normalGo book fill lv U48               dep = U48
-  normalGo book fill lv (Num val)         dep = Num val
+  normalGo book fill lv I48               dep = I48
+  normalGo book fill lv F48               dep = F48
+  normalGo book fill lv (UNum val)        dep = UNum val
+  normalGo book fill lv (INum val)        dep = INum val
+  normalGo book fill lv (FNum val)        dep = FNum val
   normalGo book fill lv (Op2 opr fst snd) dep = Op2 opr (normal book fill lv fst dep) (normal book fill lv snd dep)
   normalGo book fill lv (Swi nam x z s p) dep = Swi nam (normal book fill lv x dep) (normal book fill lv z dep) (\k -> normal book fill lv (s (Var (nam ++ "-1") dep)) dep) (\k -> normal book fill lv (p (Var nam dep)) dep)
   normalGo book fill lv (Txt val)         dep = Txt val
@@ -414,7 +460,15 @@ identical a b dep = go a b dep where
     return True
   go U48 U48 dep =
     return True
-  go (Num aVal) (Num bVal) dep =
+  go I48 I48 dep =
+    return True
+  go F48 F48 dep =
+    return True
+  go (UNum aVal) (UNum bVal) dep =
+    return (aVal == bVal)
+  go (INum aVal) (INum bVal) dep =
+    return (aVal == bVal)
+  go (FNum aVal) (FNum bVal) dep =
     return (aVal == bVal)
   go (Op2 aOpr aFst aSnd) (Op2 bOpr bFst bSnd) dep = do
     iFst <- identical aFst bFst dep
@@ -526,7 +580,11 @@ unifySubst lvl neo (Met uid spn)     = Met uid (map (unifySubst lvl neo) spn)
 unifySubst lvl neo (Hol nam ctx)     = Hol nam (map (unifySubst lvl neo) ctx)
 unifySubst lvl neo Set               = Set
 unifySubst lvl neo U48               = U48
-unifySubst lvl neo (Num n)           = Num n
+unifySubst lvl neo I48               = I48
+unifySubst lvl neo F48               = F48
+unifySubst lvl neo (UNum n)          = UNum n
+unifySubst lvl neo (INum n)          = INum n
+unifySubst lvl neo (FNum n)          = FNum n
 unifySubst lvl neo (Op2 opr fst snd) = Op2 opr (unifySubst lvl neo fst) (unifySubst lvl neo snd)
 unifySubst lvl neo (Swi nam x z s p) = Swi nam (unifySubst lvl neo x) (unifySubst lvl neo z) (\k -> unifySubst lvl neo (s k)) (\k -> unifySubst lvl neo (p k))
 unifySubst lvl neo (Txt txt)         = Txt txt
@@ -631,10 +689,34 @@ inferGo src U48 dep = do
   return Set
 
 -- ...
+-- --------- I48-type
+-- I48 : Set
+inferGo src I48 dep = do
+  return Set
+
+-- ...
+-- --------- F48-type
+-- F48 : Set
+inferGo src F48 dep = do
+  return Set
+
+-- ...
 -- ----------- U48-value
 -- <num> : U48
-inferGo src (Num num) dep = do
+inferGo src (UNum num) dep = do
   return U48
+
+-- ...
+-- ----------- I48-value
+-- <num> : I48
+inferGo src (INum num) dep = do
+  return I48
+
+-- ...
+-- ----------- F48-value
+-- <num> : F48
+inferGo src (FNum num) dep = do
+  return F48
 
 -- ...
 -- -------------- String-literal
@@ -650,12 +732,23 @@ inferGo src (Nat val) dep = do
 
 -- fst : U48
 -- snd : U48
--- ----------------- U48-operator
+-- ----------------- Numeric-operator
 -- (+ fst snd) : U48
 inferGo src (Op2 opr fst snd) dep = do
-  envSusp (Check src fst U48 dep)
-  envSusp (Check src snd U48 dep)
-  return U48
+  typ <- infer src fst dep
+  case typ of
+    U48 -> do
+      envSusp (Check src snd U48 dep)
+      return U48
+    I48 -> do
+      envSusp (Check src snd I48 dep)
+      return I48
+    F48 -> do
+      envSusp (Check src snd F48 dep)
+      return F48
+    _ -> do
+      envLog (Error src (Hol "numeric_type" []) typ fst dep)
+      envFail
 
 -- x : U48
 -- p : U48 -> Set
@@ -666,8 +759,8 @@ inferGo src (Op2 opr fst snd) dep = do
 inferGo src (Swi nam x z s p) dep = do
   envSusp (Check src x U48 dep)
   envSusp (Check src (p (Ann False (Var nam dep) U48)) Set dep)
-  envSusp (Check src z (p (Num 0)) dep)
-  envSusp (Check src (s (Ann False (Var (nam ++ "-1") dep) U48)) (p (Op2 ADD (Num 1) (Var (nam ++ "-1") dep))) (dep + 1))
+  envSusp (Check src z (p (UNum 0)) dep)
+  envSusp (Check src (s (Ann False (Var (nam ++ "-1") dep) U48)) (p (Op2 ADD (UNum 1) (Var (nam ++ "-1") dep))) (dep + 1))
   return (p x)
 
 -- val : typ
@@ -816,6 +909,7 @@ checkDef (Ref nam) = do
   book <- envGetBook
   case M.lookup nam book of
     Just val -> case val of
+      -- Ann chk val typ -> if chk then check 0 val typ 0 >> return () else return ()
       Ann chk val typ -> check 0 val typ 0 >> return ()
       Ref nm2         -> checkDef (Ref nm2)
       _               -> infer 0 val 0 >> return ()
@@ -869,7 +963,15 @@ termStr (Use nam val bod) dep =
   in concat ["use " , nam' , " = " , val' , "; " , bod']
 termStr Set dep = "*"
 termStr U48 dep = "U48"
-termStr (Num val) dep =
+termStr I48 dep = "I48"
+termStr F48 dep = "F48"
+termStr (UNum val) dep =
+  let val' = show val
+  in concat [val']
+termStr (INum val) dep =
+  let val' = show val
+  in concat [val']
+termStr (FNum val) dep =
   let val' = show val
   in concat [val']
 termStr (Op2 opr fst snd) dep =
@@ -940,30 +1042,12 @@ infoStr book fill (Print value dep) =
   let val = termStr (normal book fill 0 value dep) dep
   in concat ["#print{", val, "}"]
 
-{- infoStr :: Book -> Fill -> Info -> String
-infoStr book fill (Found name typ ctx dep) =
-  let typ' = termStr (normal book fill 0 typ dep) dep
-      ctx' = drop 1 (contextStr book fill ctx dep)
-      fillStr = showFill fill
-  in concat ["#found{", name, " ", typ', " [", ctx', "]} Fill: ", fillStr]
-infoStr book fill (Error src expected detected value dep) =
-  let exp = termStr (normal book fill 0 expected dep) dep
-      det = termStr (normal book fill 0 detected dep) dep
-      val = termStr (normal book fill 0 value dep) dep
-      fillStr = showFill fill
-  in concat ["#error{", exp, " ", det, " ", val, " ", show src, "} Fill: ", fillStr]
-infoStr book fill (Solve name term dep) =
-  let term' = termStr (normal book fill 0 term dep) dep
-      fillStr = showFill fill
-  in concat ["#solve{", show name, " ",  term', "} Fill: ", fillStr]
-infoStr book fill (Vague name) =
-  let fillStr = showFill fill
-  in concat ["#vague{", name, "} Fill: ", fillStr]
-infoStr book fill (Print value dep) =
-  let val = termStr (normal book fill 0 value dep) dep
-      fillStr = showFill fill
-    in concat ["#print{", val, "} Fill: ", fillStr]
- -}
+fillStr :: Fill -> String
+fillStr fill = 
+  let entries = IM.toList fill
+      showEntry (k, v) = show k ++ " -> " ++ termStr v 0
+  in "{" ++ intercalate ", " (map showEntry entries) ++ "}"
+
 
 -- Parsing
 -- -------
@@ -987,7 +1071,9 @@ parseTerm = do
     , parseUse
     , parseLet
     , parseSet
-    , parseNum
+    , parseFNum
+    , parseINum
+    , parseUNum
     , parseSwi
     , parseTxt
     , parseNat
@@ -1049,6 +1135,8 @@ parseRef = do
   name <- parseName
   return $ case name of
     "U48" -> U48
+    "I48" -> I48
+    "F48" -> F48
     _     -> Ref name
 
 parseUse = do
@@ -1073,7 +1161,31 @@ parseLet = do
 
 parseSet = P.char '*' >> return Set
 
-parseNum = Num . read <$> P.many1 P.digit
+parseUNum = UNum . read <$> P.many1 P.digit
+
+parseINum = do
+  sign <- P.try (P.char '+' <|> P.char '-')
+  num <- read <$> P.many1 P.digit
+  return $ if sign == '+' then INum num else INum (-num)
+
+parseFNum = do
+  (sign, num) <- P.try $ do
+    sign <- p_sign
+    num <- read <$> P.many1 P.digit
+    P.char '.'
+    return (sign, num)
+  frac <- to_frac . read <$> P.many1 P.digit
+  exp <- P.option 0 $ do
+    P.try (P.char 'e' <|> P.char 'E')
+    sign <- p_sign
+    val <- read <$> P.many1 P.digit
+    return $ sign * val
+  let val = sign * (num + frac) * (10 ** exp)
+  return $ FNum val
+  where
+    p_sign = P.option 1 $ P.try $ (P.char '+' >> return 1) <|> (P.char '-' >> return (-1))
+    -- Converts XYZ into 0.XYZ
+    to_frac = \a -> if a /= 0 then a / (10 ** (fromIntegral (truncate (logBase 10 a)) + 1)) else 0
 
 parseOp2 = do
   opr <- P.try $ do
@@ -1211,6 +1323,7 @@ apiPrintLogs (State book fill susp (log : logs)) = do
   putStrLn $ infoStr book fill log
   apiPrintLogs (State book fill susp logs)
 apiPrintLogs (State book fill susp []) = do
+  -- putStrLn $ fillStr fill
   return ()
 
 -- Main
